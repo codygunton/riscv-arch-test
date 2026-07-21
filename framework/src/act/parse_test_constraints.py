@@ -183,15 +183,15 @@ def generate_test_dict(tests_dir: Path, extensions: str, exclude: str = "") -> d
         for ext in extension_list:
             if ext in exclude_list:
                 continue
-            for test_file in tests_dir.rglob(f"*/{ext}/*.S"):
+            for test_file in tests_dir.rglob(f"*/{ext}/**/*.S"):
                 config = extract_yaml_config(test_file)
                 test_file_unique_name = str(test_file.relative_to(tests_dir))
                 test_list[test_file_unique_name] = config
     else:
         for test_file in tests_dir.rglob("*.S"):
             # Check if the test file's extension directory is in the exclude list
-            ext_dir = test_file.parent.name
-            if ext_dir in exclude_list:
+            test_dirs = test_file.relative_to(tests_dir).parts[:-1]
+            if any(ext in test_dirs for ext in exclude_list):
                 continue
             config = extract_yaml_config(test_file)
             test_file_unique_name = str(test_file.relative_to(tests_dir))
