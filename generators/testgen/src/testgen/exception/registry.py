@@ -17,6 +17,7 @@ from testgen.exception.common import (
     generate_illegal_instruction_tests,
     generate_instr_access_fault_tests,
     generate_load_access_fault_tests,
+    generate_misaligned_priority_fetch_tests,
     generate_misaligned_priority_load_tests,
     generate_misaligned_priority_store_tests,
     generate_store_access_fault_tests,
@@ -88,6 +89,17 @@ def _priority_store(op: str, offset: int) -> StimulusGenerator:
     return generate
 
 
+def _priority_fetch(test_data: TestData, covergroup: str) -> list[str]:
+    return generate_misaligned_priority_fetch_tests(
+        test_data,
+        covergroup,
+        "cp_misaligned_priority_fetch",
+        name_prefix="",
+        name_suffix="",
+        include_existent=False,
+    )
+
+
 def _instruction_access_fault(test_data: TestData, covergroup: str) -> list[str]:
     return generate_instr_access_fault_tests(test_data, covergroup, use_trap_handler_sentinel=False)
 
@@ -102,6 +114,12 @@ def get_exception_cases() -> tuple[ExceptionCase, ...]:
             "InstructionAccessFault",
             1,
             _instruction_access_fault,
+            params=("RVMODEL_ACCESS_FAULT_ADDRESS_DEFINED: true",),
+        ),
+        ExceptionCase(
+            "InstructionAccessPriorityOffset2",
+            1,
+            _priority_fetch,
             params=("RVMODEL_ACCESS_FAULT_ADDRESS_DEFINED: true",),
         ),
         *(ExceptionCase(f"LoadAccessFault{op.title()}", 5, _load(op), params=("RVMODEL_ACCESS_FAULT_ADDRESS_DEFINED: true",)) for op in ("lb", "lbu", "lh", "lhu", "lw", "lwu", "ld")),

@@ -543,6 +543,9 @@ def generate_misaligned_priority_fetch_tests(
     coverpoint: str,
     name_prefix: str = "fetch_",
     name_suffix: str = "_priority",
+    *,
+    include_existent: bool = True,
+    include_nonexistent: bool = True,
 ) -> list[str]:
     """Generate misaligned-priority fetch testcases."""
     addr_reg = test_data.int_regs.get_register()
@@ -550,8 +553,9 @@ def generate_misaligned_priority_fetch_tests(
     lines = [comment_banner(coverpoint, "Misaligned Priority Fetch")]
 
     target_label = f"misaligned_fetch_target_{test_data.test_count + 1}"
-    lines.extend(
-        [
+    if include_existent:
+        lines.extend(
+            [
             "\n# misaligned fetch - existent address",
             f"LA(x{addr_reg}, {target_label})",
             f"addi x{addr_reg}, x{addr_reg}, 2",
@@ -561,6 +565,11 @@ def generate_misaligned_priority_fetch_tests(
             ".p2align 4",
             f"{target_label}:",
             "nop",
+            ]
+        )
+    if include_nonexistent:
+        lines.extend(
+            [
             "#ifdef RVMODEL_ACCESS_FAULT_ADDRESS",
             "\n# misaligned fetch - non-existent (fault) address",
             f"LA(x{addr_reg}, RVMODEL_ACCESS_FAULT_ADDRESS)",
@@ -569,8 +578,8 @@ def generate_misaligned_priority_fetch_tests(
             f"jalr x1, 0(x{addr_reg})",
             "nop",
             "#endif",
-        ]
-    )
+            ]
+        )
 
     test_data.int_regs.return_registers([addr_reg])
     return lines
