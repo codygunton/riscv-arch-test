@@ -76,15 +76,24 @@ def select_tests(
     config_params: dict[str, ConfigParamValue],
     *,
     include_priv_tests: bool = True,
+    external_exception_reporting: bool = False,
 ) -> dict[str, TestMetadata]:
     """Select tests that match the UDB configuration."""
     selected_tests: dict[str, TestMetadata] = {}
     for test_name, test_metadata in test_dict.items():
+        if (
+            test_metadata.expected_outcome is not None
+            and test_metadata.expected_outcome.kind == "exception"
+            and not external_exception_reporting
+        ):
+            continue
         # Skip privileged tests if disabled
         if not include_priv_tests and not test_metadata.required_extensions.isdisjoint(PRIV_EXTENSIONS):
             continue
         # Check if all required extensions are implemented
-        if test_metadata.required_extensions.issubset(implemented_extensions):
+        if test_metadata.required_extensions.issubset(implemented_extensions) and test_metadata.forbidden_extensions.isdisjoint(
+            implemented_extensions
+        ):
             # Check if all parameters match
             test_params = test_metadata.params
             if check_test_params(test_params, config_params):
@@ -125,8 +134,25 @@ def prepare_configs_and_select_tests(
     for config in configs:
         implemented_extensions = get_implemented_extensions(workdir / config.name / "extensions.txt")
         config_params = get_config_params(config.udb_config) | get_ref_model_pmp_params(config.dut_include_dir)
-        selected_tests = select_tests(
-            full_test_dict, implemented_extensions, config_params, include_priv_tests=config.include_priv_tests
+        macros = config.dut_include_dir / "rvmodel_macros.h"
+        config_params["RVMODEL_ACCESS_FAULT_ADDRESS_DEFINED"] = (
+            macros.exists() and "RVMODEL_ACCESS_FAULT_ADDRESS" in macros.read_text()
         )
+        selected_tests = select_tests(
+            full_test_dict,
+            implemented_extensions,
+            config_params,
+            include_priv_tests=config.include_priv_tests,
+            external_exception_reporting=config.external_exception_reporting is not None,
+        )
+        if config.external_exception_reporting is not None:
+            supported_causes = config.external_exception_reporting.supported_causes
+            selected_tests = {
+                name: metadata
+                for name, metadata in selected_tests.items()
+                if metadata.expected_outcome is None
+                or metadata.expected_outcome.kind != "exception"
+                or metadata.expected_outcome.cause in supported_causes
+            }
         results.append((config, config_params, selected_tests))
     return results

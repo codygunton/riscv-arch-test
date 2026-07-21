@@ -9,6 +9,7 @@
 ##################################
 
 import importlib.resources
+import json
 from collections import defaultdict
 from pathlib import Path
 
@@ -31,6 +32,12 @@ _OBJDUMP_FLAGS_COMMON = ["-x", "-d", "-S", "-M", "no-aliases,numeric"]
 # -t: print the full symbol table
 # -s: print a full hex+ASCII dump of every section
 _OBJDUMP_FLAGS_DEBUG = [*_OBJDUMP_FLAGS_COMMON, "-t", "-s"]
+
+
+def write_exception_manifest(path: Path, entries: dict[str, dict[str, int | str]]) -> None:
+    """Write resolved architectural outcomes for external test runners."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(entries, indent=2, sort_keys=True) + "\n")
 
 
 # ---------------------------------------------------------------------------
@@ -142,6 +149,39 @@ def gen_compile_tasks(
     test_flen = test_metadata.flen
     test_path = test_metadata.test_path
     mabi = f"{'i' if xlen == 32 else ''}lp{xlen}{'e' if test_metadata.e_ext else ''}"
+
+    if test_metadata.expected_outcome is not None and test_metadata.expected_outcome.kind == "exception":
+        final_elf_cmd = [
+            *compiler_cmd,
+            "-o",
+            str(final_elf),
+            f"-march={march}",
+            f"-mabi={mabi}",
+            "-DRVTEST_TERMINATION",
+            f"-DXLEN={xlen}",
+            f"-DTEST_FLEN={test_flen}",
+            str(test_path),
+        ]
+        tasks.append(
+            BuildTask(
+                outputs=(final_elf,),
+                extra_inputs=(test_path, *compile_inputs),
+                action=SubprocessAction(cmd=final_elf_cmd),
+            )
+        )
+        if not fast and config.objdump_exe is not None:
+            objdump_file = Path(f"{final_elf}.objdump")
+            tasks.append(
+                BuildTask(
+                    outputs=(objdump_file,),
+                    deps=(final_elf,),
+                    action=SubprocessAction(
+                        cmd=[str(config.objdump_exe), *_OBJDUMP_FLAGS_COMMON, str(final_elf)],
+                        stdout_file=objdump_file,
+                    ),
+                )
+            )
+        return tasks
 
     # 1. sig.elf – compile with -DSIGNATURE
     sig_elf_cmd = [
@@ -526,7 +566,7 @@ def generate_build_plan(
         )
 
         # Coverage trace generation
-        if coverage_enabled:
+        if coverage_enabled and test_metadata.expected_outcome is None:
             trace_name = test_name.with_suffix(".rvvi")
             trace_path = config_coverage_dir / trace_name
             coverage_group_dir = trace_path.parent.relative_to(config_coverage_dir)
@@ -539,6 +579,31 @@ def generate_build_plan(
                     config,
                     ref_model_inputs,
                     fast,
+                )
+            )
+
+    external = config.external_exception_reporting
+    if external is not None:
+        manifest_entries: dict[str, dict[str, int | str]] = {}
+        manifest_deps: list[Path] = []
+        for test_name_str, metadata in sorted(selected_tests.items()):
+            outcome = metadata.expected_outcome
+            if outcome is None or outcome.kind != "exception" or outcome.cause is None:
+                continue
+            elf = config_wkdir / "elfs" / Path(test_name_str).with_suffix(".elf")
+            manifest_deps.append(elf)
+            manifest_entries[str(Path(test_name_str).with_suffix(".elf"))] = {
+                "kind": outcome.kind,
+                "cause": outcome.cause,
+                "expected_exit": external.expected_exit(outcome.cause),
+            }
+        if manifest_entries:
+            manifest = config_wkdir / "exception-manifest.json"
+            tasks.append(
+                BuildTask(
+                    outputs=(manifest,),
+                    deps=tuple(manifest_deps),
+                    action=PythonAction(fn=write_exception_manifest, args=(manifest, manifest_entries)),
                 )
             )
 

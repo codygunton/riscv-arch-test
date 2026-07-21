@@ -54,11 +54,15 @@ def insert_header_template(
     march_extensions = test_config.march_extensions
     if march_extensions is not None:
         march_ext_components, _ = canonicalize_extensions(testsuite, xlen, E_ext, march_extensions, sew, instr_name)
-        march = generate_march_string(march_ext_components, xlen)
+        march = generate_march_string(
+            march_ext_components, xlen, include_environment_extensions=test_config.expected_outcome is None
+        )
         # combine required_extensions and march_extensions for extra_defines
         all_extensions = list(dict.fromkeys(ext_components + march_ext_components))
     else:
-        march = generate_march_string(ext_components, xlen)
+        march = generate_march_string(
+            ext_components, xlen, include_environment_extensions=test_config.expected_outcome is None
+        )
         all_extensions = ext_components
     all_defines = [*(extra_defines or []), *generate_defines_from_extensions(all_extensions)]
     # Replace placeholders
@@ -68,10 +72,24 @@ def insert_header_template(
         .replace("@EXTENSION_LIST@", f"{ext_components}")
         .replace("@PARAMS@", format_params(params, ext_components))
         .replace("@MARCH@", march)
+        .replace("@OPTIONAL_METADATA@", format_optional_metadata(test_config))
         .replace("@EXTRA_DEFINES@", "\n".join(all_defines))
         .replace("@SIGUPD_COUNT_FROM_TESTGEN@", str(sigupd_count))
     )
     return template
+
+
+def format_optional_metadata(test_config: TestConfig) -> str:
+    """Format optional selection and outcome metadata without changing ordinary headers."""
+    lines: list[str] = []
+    if test_config.forbidden_extensions:
+        lines.append(f"# FORBIDDEN_EXTENSIONS: {test_config.forbidden_extensions}")
+    outcome = test_config.expected_outcome
+    if outcome is not None:
+        lines.extend(["# EXPECTED_OUTCOME:", f"#   kind: {outcome.kind}"])
+        if outcome.cause is not None:
+            lines.append(f"#   cause: {outcome.cause}")
+    return "" if not lines else "\n" + "\n".join(lines)
 
 
 def insert_footer_template(test_data_section: str, test_string_section: str) -> str:
@@ -250,7 +268,9 @@ def _multi_letter_sort_key(ext: str) -> tuple[int, int, str]:
     return (group, subgroup, ext)
 
 
-def generate_march_string(ext_components: list[str], xlen: int) -> str:
+def generate_march_string(
+    ext_components: list[str], xlen: int, *, include_environment_extensions: bool = True
+) -> str:
     """Generate march string from extension components."""
     # Separate single-letter and multi-letter extensions
     single_letter: list[str] = []
@@ -264,11 +284,11 @@ def generate_march_string(ext_components: list[str], xlen: int) -> str:
             multi_letter.append(ext)
 
     # Always include Zicsr so boot code CSR instructions can compile
-    if "Zicsr" not in multi_letter:
+    if include_environment_extensions and "Zicsr" not in multi_letter:
         multi_letter.append("Zicsr")
 
     # Always include Zifencei so trap handler fence.i can be assembled
-    if "Zifencei" not in multi_letter:
+    if include_environment_extensions and "Zifencei" not in multi_letter:
         multi_letter.append("Zifencei")
 
     # workaround for https://github.com/llvm/llvm-project/issues/190910; can be removed when this is resolved

@@ -11,7 +11,7 @@
 from testgen.asm.helpers import comment_banner, write_sigupd
 from testgen.data.state import TestData
 from testgen.data.test_chunk import TestChunk
-from testgen.priv.extensions.ExceptionsCommon import (
+from testgen.exception.common import (
     generate_breakpoint_tests,
     generate_ecall_tests,
     generate_illegal_instruction_seed_tests,
