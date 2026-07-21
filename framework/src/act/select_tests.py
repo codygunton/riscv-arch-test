@@ -128,14 +128,17 @@ def prepare_configs_and_select_tests(
             may run before those tools are installed.
     """
     configs = [load_config(config_file, validate_tools=validate_tools) for config_file in config_files]
-    prepare_dut_outputs(configs, workdir, jobs, verbose)
+    prepare_dut_outputs([config for config in configs if config.architecture_override is None], workdir, jobs, verbose)
 
     results: list[tuple[Config, dict[str, ConfigParamValue], dict[str, TestMetadata]]] = []
     for config in configs:
-        implemented_extensions = get_implemented_extensions(workdir / config.name / "extensions.txt")
-        config_params = get_config_params(config.udb_config) | get_ref_model_pmp_params(config.dut_include_dir)
-        if config.xlen is not None:
-            config_params["MXLEN"] = config.xlen
+        override = config.architecture_override
+        if override is None:
+            implemented_extensions = get_implemented_extensions(workdir / config.name / "extensions.txt")
+            config_params = get_config_params(config.udb_config) | get_ref_model_pmp_params(config.dut_include_dir)
+        else:
+            implemented_extensions = override.implemented_extensions
+            config_params = {**override.params, "MXLEN": override.xlen}
         macros = config.dut_include_dir / "rvmodel_macros.h"
         config_params["RVMODEL_ACCESS_FAULT_ADDRESS_DEFINED"] = (
             macros.exists() and "RVMODEL_ACCESS_FAULT_ADDRESS" in macros.read_text()

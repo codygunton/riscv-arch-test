@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Literal
 
 import rich
-from pydantic import BaseModel, DirectoryPath, FilePath, ValidationInfo, field_validator, model_validator
+from pydantic import BaseModel, DirectoryPath, Field, FilePath, ValidationInfo, field_validator, model_validator
 from ruamel.yaml import YAML
 
 
@@ -113,6 +113,16 @@ class ExternalExceptionReporting(BaseModel):
         return self.cause_offset + cause
 
 
+class ArchitectureOverride(BaseModel):
+    """Explicit architecture facts for execution environments not modeled by UDB."""
+
+    xlen: Literal[32, 64]
+    implemented_extensions: set[str]
+    params: dict[str, int | bool | str] = Field(default_factory=dict)
+
+    model_config = {"extra": "forbid", "frozen": True}
+
+
 class Config(BaseModel):
     """Configuration for the RISC-V architecture verification framework."""
 
@@ -126,7 +136,7 @@ class Config(BaseModel):
     ref_model_exe: Path
     ref_model_type: RefModelType  # Inferred from ref_model_exe by model validator
     include_priv_tests: bool = True
-    xlen: Literal[32, 64] | None = None
+    architecture_override: ArchitectureOverride | None = None
     external_exception_reporting: ExternalExceptionReporting | None = None
 
     model_config = {"frozen": True}
