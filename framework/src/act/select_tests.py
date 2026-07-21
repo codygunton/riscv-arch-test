@@ -134,6 +134,8 @@ def prepare_configs_and_select_tests(
     for config in configs:
         implemented_extensions = get_implemented_extensions(workdir / config.name / "extensions.txt")
         config_params = get_config_params(config.udb_config) | get_ref_model_pmp_params(config.dut_include_dir)
+        if config.xlen is not None:
+            config_params["MXLEN"] = config.xlen
         macros = config.dut_include_dir / "rvmodel_macros.h"
         config_params["RVMODEL_ACCESS_FAULT_ADDRESS_DEFINED"] = (
             macros.exists() and "RVMODEL_ACCESS_FAULT_ADDRESS" in macros.read_text()
