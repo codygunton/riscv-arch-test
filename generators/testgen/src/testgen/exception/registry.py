@@ -17,6 +17,8 @@ from testgen.exception.common import (
     generate_illegal_instruction_tests,
     generate_instr_access_fault_tests,
     generate_load_access_fault_tests,
+    generate_misaligned_priority_load_tests,
+    generate_misaligned_priority_store_tests,
     generate_store_access_fault_tests,
 )
 
@@ -58,6 +60,34 @@ def _store(op: str) -> StimulusGenerator:
     return generate
 
 
+def _priority_load(op: str, offset: int) -> StimulusGenerator:
+    def generate(test_data: TestData, covergroup: str) -> list[str]:
+        return generate_misaligned_priority_load_tests(
+            test_data,
+            covergroup,
+            "cp_misaligned_priority_load",
+            name_infix="_",
+            operations=(op,),
+            offsets=(offset,),
+        )
+
+    return generate
+
+
+def _priority_store(op: str, offset: int) -> StimulusGenerator:
+    def generate(test_data: TestData, covergroup: str) -> list[str]:
+        return generate_misaligned_priority_store_tests(
+            test_data,
+            covergroup,
+            "cp_misaligned_priority_store",
+            name_infix="_",
+            operations=(op,),
+            offsets=(offset,),
+        )
+
+    return generate
+
+
 def _instruction_access_fault(test_data: TestData, covergroup: str) -> list[str]:
     return generate_instr_access_fault_tests(test_data, covergroup, use_trap_handler_sentinel=False)
 
@@ -76,4 +106,24 @@ def get_exception_cases() -> tuple[ExceptionCase, ...]:
         ),
         *(ExceptionCase(f"LoadAccessFault{op.title()}", 5, _load(op), params=("RVMODEL_ACCESS_FAULT_ADDRESS_DEFINED: true",)) for op in ("lb", "lbu", "lh", "lhu", "lw", "lwu", "ld")),
         *(ExceptionCase(f"StoreAccessFault{op.title()}", 7, _store(op), params=("RVMODEL_ACCESS_FAULT_ADDRESS_DEFINED: true",)) for op in ("sb", "sh", "sw", "sd")),
+        *(
+            ExceptionCase(
+                f"LoadAccessPriority{op.title()}Offset{offset}",
+                5,
+                _priority_load(op, offset),
+                params=("RVMODEL_ACCESS_FAULT_ADDRESS_DEFINED: true",),
+            )
+            for op in ("lb", "lbu", "lh", "lhu", "lw", "lwu", "ld")
+            for offset in range(8)
+        ),
+        *(
+            ExceptionCase(
+                f"StoreAccessPriority{op.title()}Offset{offset}",
+                7,
+                _priority_store(op, offset),
+                params=("RVMODEL_ACCESS_FAULT_ADDRESS_DEFINED: true",),
+            )
+            for op in ("sb", "sh", "sw", "sd")
+            for offset in range(8)
+        ),
     )

@@ -440,17 +440,20 @@ def generate_misaligned_priority_load_tests(
     covergroup: str,
     coverpoint: str,
     name_infix: str = "_load_",
+    *,
+    operations: tuple[str, ...] = ("lh", "lhu", "lw", "lb", "lbu", "lwu", "ld"),
+    offsets: tuple[int, ...] = tuple(range(8)),
 ) -> list[str]:
     """Generate misaligned-priority load testcases."""
     addr_reg, temp_reg, check_reg = test_data.int_regs.get_registers(3)
 
     lines = ["#ifdef RVMODEL_ACCESS_FAULT_ADDRESS", comment_banner(coverpoint, "Misaligned Priority Load")]
-    load_ops_base = ["lh", "lhu", "lw", "lb", "lbu"]
-    load_ops_64 = ["lwu", "ld"]
+    load_ops_base = [op for op in operations if op not in ("lwu", "ld")]
+    load_ops_64 = [op for op in operations if op in ("lwu", "ld")]
 
     lines.append(f"LA(x{addr_reg}, RVMODEL_ACCESS_FAULT_ADDRESS)")
 
-    for offset in range(8):
+    for offset in offsets:
         lines.append(f"addi x{temp_reg}, x{addr_reg}, {offset}")
 
         for op in load_ops_base:
@@ -485,14 +488,17 @@ def generate_misaligned_priority_store_tests(
     covergroup: str,
     coverpoint: str,
     name_infix: str = "_store_",
+    *,
+    operations: tuple[str, ...] = ("sb", "sh", "sw", "sd"),
+    offsets: tuple[int, ...] = tuple(range(8)),
 ) -> list[str]:
     """Generate misaligned-priority store testcases."""
     addr_reg, data_reg = test_data.int_regs.get_registers(2)
 
     lines = ["#ifdef RVMODEL_ACCESS_FAULT_ADDRESS", comment_banner(coverpoint, "Misaligned Priority Store")]
-    store_ops_base = ["sb", "sh", "sw"]
+    store_ops_base = [op for op in operations if op != "sd"]
 
-    for offset in range(8):
+    for offset in offsets:
         lines.extend(
             [
                 f"LA(x{addr_reg}, RVMODEL_ACCESS_FAULT_ADDRESS)",
@@ -511,8 +517,9 @@ def generate_misaligned_priority_store_tests(
                 ]
             )
 
-        lines.extend(
-            [
+        if "sd" in operations:
+            lines.extend(
+                [
                 "",
                 "#if __riscv_xlen == 64",
                 f"\n# Testcase: sd with offset {offset} (LSBs: {offset:03b}) - Access fault Misaligned",
@@ -522,8 +529,8 @@ def generate_misaligned_priority_store_tests(
                 "",
                 "#endif",
                 "",
-            ]
-        )
+                ]
+            )
 
     lines.append("#endif")
     test_data.int_regs.return_registers([addr_reg, data_reg])
