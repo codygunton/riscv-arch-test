@@ -75,8 +75,7 @@
     #ifdef RVMODEL_BOOT
       RVMODEL_BOOT
     #endif
-    LA(T1, rvtest_init)
-    jr T1
+    ret
   .popsection
 
   .option pop
