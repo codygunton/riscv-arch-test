@@ -31,6 +31,7 @@ class ExceptionCase:
     """A stimulus and its architectural outcome, independent of how it is observed."""
 
     name: str
+    group: str
     cause: int
     stimulus: StimulusGenerator
     required_extensions: tuple[str, ...] = ("I",)
@@ -107,10 +108,11 @@ def _instruction_access_fault(test_data: TestData, covergroup: str) -> list[str]
 def get_exception_cases() -> tuple[ExceptionCase, ...]:
     """Return neutral cases currently suitable for an external exception observer."""
     return (
-        ExceptionCase("IllegalZero", 2, _illegal("0x00000000")),
-        ExceptionCase("IllegalOnes", 2, _illegal("0xFFFFFFFF")),
-        ExceptionCase("Breakpoint", 3, generate_breakpoint_tests),
+        ExceptionCase("IllegalZero", "IllegalInstruction", 2, _illegal("0x00000000")),
+        ExceptionCase("IllegalOnes", "IllegalInstruction", 2, _illegal("0xFFFFFFFF")),
+        ExceptionCase("Breakpoint", "Breakpoint", 3, generate_breakpoint_tests),
         ExceptionCase(
+            "InstructionAccessFault",
             "InstructionAccessFault",
             1,
             _instruction_access_fault,
@@ -118,15 +120,35 @@ def get_exception_cases() -> tuple[ExceptionCase, ...]:
         ),
         ExceptionCase(
             "InstructionAccessPriorityOffset2",
+            "MisalignedPriorityFetch",
             1,
             _priority_fetch,
             params=("RVMODEL_ACCESS_FAULT_ADDRESS_DEFINED: true",),
         ),
-        *(ExceptionCase(f"LoadAccessFault{op.title()}", 5, _load(op), params=("RVMODEL_ACCESS_FAULT_ADDRESS_DEFINED: true",)) for op in ("lb", "lbu", "lh", "lhu", "lw", "lwu", "ld")),
-        *(ExceptionCase(f"StoreAccessFault{op.title()}", 7, _store(op), params=("RVMODEL_ACCESS_FAULT_ADDRESS_DEFINED: true",)) for op in ("sb", "sh", "sw", "sd")),
+        *(
+            ExceptionCase(
+                f"LoadAccessFault{op.title()}",
+                "LoadAccessFault",
+                5,
+                _load(op),
+                params=("RVMODEL_ACCESS_FAULT_ADDRESS_DEFINED: true",),
+            )
+            for op in ("lb", "lbu", "lh", "lhu", "lw", "lwu", "ld")
+        ),
+        *(
+            ExceptionCase(
+                f"StoreAccessFault{op.title()}",
+                "StoreAccessFault",
+                7,
+                _store(op),
+                params=("RVMODEL_ACCESS_FAULT_ADDRESS_DEFINED: true",),
+            )
+            for op in ("sb", "sh", "sw", "sd")
+        ),
         *(
             ExceptionCase(
                 f"LoadAccessPriority{op.title()}Offset{offset}",
+                "MisalignedPriorityLoad",
                 5,
                 _priority_load(op, offset),
                 params=("RVMODEL_ACCESS_FAULT_ADDRESS_DEFINED: true",),
@@ -137,6 +159,7 @@ def get_exception_cases() -> tuple[ExceptionCase, ...]:
         *(
             ExceptionCase(
                 f"StoreAccessPriority{op.title()}Offset{offset}",
+                "MisalignedPriorityStore",
                 7,
                 _priority_store(op, offset),
                 params=("RVMODEL_ACCESS_FAULT_ADDRESS_DEFINED: true",),

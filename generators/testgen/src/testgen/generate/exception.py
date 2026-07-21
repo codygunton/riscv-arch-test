@@ -39,6 +39,8 @@ def generate_exception_tests(output_test_dir: Path) -> None:
         chunk.code.extend(case.stimulus(data, "ExceptionsSm_cg"))
         chunk.code.append("RVMODEL_HALT_FAIL")
         chunk = data.end_test_chunk()
-        write_test_file(config, None, [chunk], output_path, split_name=case.name)
+        group_path = output_path / case.group
+        group_path.mkdir(parents=True, exist_ok=True)
+        write_test_file(config, None, [chunk], group_path, split_name=case.name)
         data.int_regs.return_registers(reserved)
         data.destroy()
