@@ -65,7 +65,7 @@
 /**** - Include headers that contain code (not macros) that would throw off the address ****/
 /**** - Terminate test with call to RVMODEL_HALT                                        ****/
 /*******************************************************************************************/
-#ifdef RVTEST_TERMINATION
+#ifdef RVMODEL_COMPILE_ONLY
 .macro RVTEST_CODE_END
   .global rvtest_code_end
   rvtest_code_end:

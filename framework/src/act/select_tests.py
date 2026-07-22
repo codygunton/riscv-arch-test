@@ -76,24 +76,15 @@ def select_tests(
     config_params: dict[str, ConfigParamValue],
     *,
     include_priv_tests: bool = True,
-    external_exception_reporting: bool = False,
 ) -> dict[str, TestMetadata]:
     """Select tests that match the UDB configuration."""
     selected_tests: dict[str, TestMetadata] = {}
     for test_name, test_metadata in test_dict.items():
-        if (
-            test_metadata.expected_outcome is not None
-            and test_metadata.expected_outcome.kind == "exception"
-            and not external_exception_reporting
-        ):
-            continue
         # Skip privileged tests if disabled
         if not include_priv_tests and not test_metadata.required_extensions.isdisjoint(PRIV_EXTENSIONS):
             continue
         # Check if all required extensions are implemented
-        if test_metadata.required_extensions.issubset(implemented_extensions) and test_metadata.forbidden_extensions.isdisjoint(
-            implemented_extensions
-        ):
+        if test_metadata.required_extensions.issubset(implemented_extensions):
             # Check if all parameters match
             test_params = test_metadata.params
             if check_test_params(test_params, config_params):
@@ -128,17 +119,12 @@ def prepare_configs_and_select_tests(
             may run before those tools are installed.
     """
     configs = [load_config(config_file, validate_tools=validate_tools) for config_file in config_files]
-    prepare_dut_outputs([config for config in configs if config.architecture_override is None], workdir, jobs, verbose)
+    prepare_dut_outputs(configs, workdir, jobs, verbose)
 
     results: list[tuple[Config, dict[str, ConfigParamValue], dict[str, TestMetadata]]] = []
     for config in configs:
-        override = config.architecture_override
-        if override is None:
-            implemented_extensions = get_implemented_extensions(workdir / config.name / "extensions.txt")
-            config_params = get_config_params(config.udb_config) | get_ref_model_pmp_params(config.dut_include_dir)
-        else:
-            implemented_extensions = override.implemented_extensions
-            config_params = {**override.params, "MXLEN": override.xlen}
+        implemented_extensions = get_implemented_extensions(workdir / config.name / "extensions.txt")
+        config_params = get_config_params(config.udb_config) | get_ref_model_pmp_params(config.dut_include_dir)
         macros = config.dut_include_dir / "rvmodel_macros.h"
         config_params["RVMODEL_ACCESS_FAULT_ADDRESS_DEFINED"] = (
             macros.exists() and "RVMODEL_ACCESS_FAULT_ADDRESS" in macros.read_text()
@@ -148,16 +134,6 @@ def prepare_configs_and_select_tests(
             implemented_extensions,
             config_params,
             include_priv_tests=config.include_priv_tests,
-            external_exception_reporting=config.external_exception_reporting is not None,
         )
-        if config.external_exception_reporting is not None:
-            supported_causes = config.external_exception_reporting.supported_causes
-            selected_tests = {
-                name: metadata
-                for name, metadata in selected_tests.items()
-                if metadata.expected_outcome is None
-                or metadata.expected_outcome.kind != "exception"
-                or metadata.expected_outcome.cause in supported_causes
-            }
         results.append((config, config_params, selected_tests))
     return results

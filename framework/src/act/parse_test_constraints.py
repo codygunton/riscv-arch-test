@@ -11,9 +11,8 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Literal
 
-from pydantic import BaseModel, Field, FilePath, ValidationError, model_validator
+from pydantic import BaseModel, Field, FilePath, ValidationError
 from rich.console import Console
 from rich.panel import Panel
 from ruamel.yaml import YAML
@@ -40,29 +39,12 @@ class TestYamlHeaderError(Exception):
         )
 
 
-class ExpectedOutcome(BaseModel):
-    """Architectural outcome asserted by a test, independent of its DUT transport."""
-
-    kind: Literal["completion", "exception"]
-    cause: int | None = Field(default=None, ge=0)
-
-    model_config = {"extra": "forbid", "frozen": True}
-
-    @model_validator(mode="after")
-    def validate_cause(self) -> ExpectedOutcome:
-        if (self.kind == "exception") != (self.cause is not None):
-            raise ValueError("cause is required exactly when kind is 'exception'")
-        return self
-
-
 class TestMetadata(BaseModel):
     """Metadata for a RISC-V test case extracted from YAML configuration."""
 
     test_path: FilePath
     required_extensions: set[str] = Field(alias="REQUIRED_EXTENSIONS", min_length=1)
-    forbidden_extensions: set[str] = Field(default_factory=set, alias="FORBIDDEN_EXTENSIONS")
     march: str = Field(alias="MARCH", pattern=r"rv(?:32|64|\$\{XLEN\})[ieg].*")
-    expected_outcome: ExpectedOutcome | None = Field(default=None, alias="EXPECTED_OUTCOME")
     params: dict[str, int | bool | str] = Field(default_factory=dict)
 
     model_config = {"extra": "forbid", "frozen": True}

@@ -10,11 +10,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 
 from testgen.data.state import TestData
 from testgen.exception.common import (
     generate_breakpoint_tests,
-    generate_illegal_instruction_tests,
+    generate_illegal_instruction_test,
     generate_instr_access_fault_tests,
     generate_load_access_fault_tests,
     generate_misaligned_priority_fetch_tests,
@@ -35,59 +36,40 @@ class ExceptionCase:
     cause: int
     stimulus: StimulusGenerator
     required_extensions: tuple[str, ...] = ("I",)
-    forbidden_extensions: tuple[str, ...] = ()
     params: tuple[str, ...] = ()
 
 
 def _illegal(encoding: str) -> StimulusGenerator:
     name = f"illegal_{encoding.lower()}"
-
-    def generate(test_data: TestData, covergroup: str) -> list[str]:
-        return generate_illegal_instruction_tests(test_data, covergroup, encodings=((name, encoding),))
-
-    return generate
+    return partial(generate_illegal_instruction_test, name=name, encoding=encoding)
 
 
 def _load(op: str) -> StimulusGenerator:
-    def generate(test_data: TestData, covergroup: str) -> list[str]:
-        return generate_load_access_fault_tests(test_data, covergroup, use_sigupd=False, operations=(op,))
-
-    return generate
+    return partial(generate_load_access_fault_tests, use_sigupd=False, operations=(op,))
 
 
 def _store(op: str) -> StimulusGenerator:
-    def generate(test_data: TestData, covergroup: str) -> list[str]:
-        return generate_store_access_fault_tests(test_data, covergroup, operations=(op,))
-
-    return generate
+    return partial(generate_store_access_fault_tests, operations=(op,))
 
 
 def _priority_load(op: str, offset: int) -> StimulusGenerator:
-    def generate(test_data: TestData, covergroup: str) -> list[str]:
-        return generate_misaligned_priority_load_tests(
-            test_data,
-            covergroup,
-            "cp_misaligned_priority_load",
-            name_infix="_",
-            operations=(op,),
-            offsets=(offset,),
-        )
-
-    return generate
+    return partial(
+        generate_misaligned_priority_load_tests,
+        coverpoint="cp_misaligned_priority_load",
+        name_infix="_",
+        operations=(op,),
+        offsets=(offset,),
+    )
 
 
 def _priority_store(op: str, offset: int) -> StimulusGenerator:
-    def generate(test_data: TestData, covergroup: str) -> list[str]:
-        return generate_misaligned_priority_store_tests(
-            test_data,
-            covergroup,
-            "cp_misaligned_priority_store",
-            name_infix="_",
-            operations=(op,),
-            offsets=(offset,),
-        )
-
-    return generate
+    return partial(
+        generate_misaligned_priority_store_tests,
+        coverpoint="cp_misaligned_priority_store",
+        name_infix="_",
+        operations=(op,),
+        offsets=(offset,),
+    )
 
 
 def _priority_fetch(test_data: TestData, covergroup: str) -> list[str]:

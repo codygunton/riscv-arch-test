@@ -13,10 +13,9 @@ import shutil
 import subprocess
 from enum import Enum
 from pathlib import Path
-from typing import Literal
 
 import rich
-from pydantic import BaseModel, DirectoryPath, Field, FilePath, ValidationInfo, field_validator, model_validator
+from pydantic import BaseModel, DirectoryPath, FilePath, ValidationInfo, field_validator, model_validator
 from ruamel.yaml import YAML
 
 
@@ -87,42 +86,6 @@ class CoverageSimulator(str, Enum):
     VCS = "vcs"
 
 
-class ExternalExceptionReporting(BaseModel):
-    """Map architectural exception causes onto a DUT process-exit transport."""
-
-    kind: str
-    cause_offset: int
-    supported_causes: set[int]
-
-    model_config = {"extra": "forbid", "frozen": True}
-
-    @model_validator(mode="after")
-    def validate_process_exits(self) -> ExternalExceptionReporting:
-        if self.kind != "process_exit":
-            raise ValueError("external exception reporting kind must be 'process_exit'")
-        exits = {self.cause_offset + cause for cause in self.supported_causes}
-        if any(code < 2 or code > 255 for code in exits):
-            raise ValueError("resolved exception process exits must be in the range 2..255")
-        if exits & {101, 124, 125, 126, 127} or any(code >= 128 for code in exits):
-            raise ValueError("resolved exception process exits overlap reserved runner statuses")
-        return self
-
-    def expected_exit(self, cause: int) -> int:
-        if cause not in self.supported_causes:
-            raise ValueError(f"architectural exception cause {cause} is not supported by this DUT transport")
-        return self.cause_offset + cause
-
-
-class ArchitectureOverride(BaseModel):
-    """Explicit architecture facts for execution environments not modeled by UDB."""
-
-    xlen: Literal[32, 64]
-    implemented_extensions: set[str]
-    params: dict[str, int | bool | str] = Field(default_factory=dict)
-
-    model_config = {"extra": "forbid", "frozen": True}
-
-
 class Config(BaseModel):
     """Configuration for the RISC-V architecture verification framework."""
 
@@ -136,8 +99,7 @@ class Config(BaseModel):
     ref_model_exe: Path
     ref_model_type: RefModelType  # Inferred from ref_model_exe by model validator
     include_priv_tests: bool = True
-    architecture_override: ArchitectureOverride | None = None
-    external_exception_reporting: ExternalExceptionReporting | None = None
+    compile_only: bool = False
 
     model_config = {"frozen": True}
 

@@ -11,7 +11,7 @@
 ##### START_TEST_CONFIG #####
 # REQUIRED_EXTENSIONS: @EXTENSION_LIST@
 # @PARAMS@
-# MARCH: @MARCH@@OPTIONAL_METADATA@
+# MARCH: @MARCH@
 ##### END_TEST_CONFIG #####
 
 // Define the name of this test file for reporting and the size of the signature region

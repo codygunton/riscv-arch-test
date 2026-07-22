@@ -13,14 +13,6 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class ExpectedOutcome:
-    """Architectural outcome expected after executing a generated test."""
-
-    kind: str
-    cause: int | None = None
-
-
-@dataclass(frozen=True)
 class TestConfig:
     """
     Immutable configuration for test generation.
@@ -51,8 +43,7 @@ class TestConfig:
     required_extensions: list[str] | None = None
     march_extensions: list[str] | None = None
     extra_params: list[str] | None = None
-    forbidden_extensions: list[str] | None = None
-    expected_outcome: ExpectedOutcome | None = None
+    include_environment_extensions: bool = True
 
     @property
     def xlen_format_str(self) -> str:

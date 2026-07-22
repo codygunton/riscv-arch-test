@@ -10,7 +10,7 @@ from pathlib import Path
 from random import seed
 
 from testgen.asm.helpers import reproducible_hash
-from testgen.data.config import ExpectedOutcome, TestConfig
+from testgen.data.config import TestConfig
 from testgen.data.state import TestData
 from testgen.exception import get_exception_cases
 from testgen.io.writer import write_test_file
@@ -27,15 +27,15 @@ def generate_exception_tests(output_test_dir: Path) -> None:
             flen=64,
             testsuite="ExceptionsI",
             required_extensions=list(case.required_extensions),
-            forbidden_extensions=list(case.forbidden_extensions),
             extra_params=list(case.params),
-            expected_outcome=ExpectedOutcome(kind="exception", cause=case.cause),
+            include_environment_extensions=False,
         )
         data = TestData(config)
         reserved = [0, 1, 7, 10, 11, 12, *range(16, 32)]
         data.int_regs.consume_registers(reserved)
         seed(reproducible_hash(case.name))
         chunk = data.begin_test_chunk(case.name)
+        chunk.code.append(f"RVMODEL_EXPECT_EXCEPTION({case.cause})")
         chunk.code.extend(case.stimulus(data, "ExceptionsSm_cg"))
         chunk.code.append("RVMODEL_HALT_FAIL")
         chunk = data.end_test_chunk()

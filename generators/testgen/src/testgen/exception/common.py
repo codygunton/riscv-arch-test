@@ -170,20 +170,30 @@ def generate_ecall_tests(
     return lines
 
 
-def generate_illegal_instruction_tests(
-    test_data: TestData,
-    covergroup: str,
-    *,
-    encodings: tuple[tuple[str, str], ...] = (
-        ("illegal_0x00000000", "0x00000000"),
-        ("illegal_0xFFFFFFFF", "0xFFFFFFFF"),
-    ),
+def generate_illegal_instruction_test(
+    test_data: TestData, covergroup: str, name: str, encoding: str
 ) -> list[str]:
     coverpoint = "cp_illegal_instruction"
+    return [
+        comment_banner(coverpoint, "Illegal Instruction"),
+        ".p2align 2",
+        test_data.add_testcase(name, coverpoint, covergroup),
+        f".word {encoding}",
+        "nop",
+    ]
+
+
+def generate_illegal_instruction_tests(test_data: TestData, covergroup: str) -> list[str]:
+    """Generate the standard pair of illegal-instruction cases."""
+    coverpoint = "cp_illegal_instruction"
+    encodings = (
+        ("illegal_0x00000000", "0x00000000"),
+        ("illegal_0xFFFFFFFF", "0xFFFFFFFF"),
+    )
 
     lines = [comment_banner(coverpoint, "Illegal Instruction")]
     for name, encoding in encodings:
-        lines.extend([".p2align 2", test_data.add_testcase(name, coverpoint, covergroup), f".word {encoding}", "nop"])
+        lines.extend(generate_illegal_instruction_test(test_data, covergroup, name, encoding)[1:])
     return lines
 
 
