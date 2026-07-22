@@ -102,6 +102,7 @@ class Config(BaseModel):
     include_priv_tests: bool = True
     compile_only: bool = False
     xlen: Literal[32, 64] | None = None
+    implemented_extensions: set[str] | None = None
 
     model_config = {"frozen": True}
 
