@@ -13,6 +13,7 @@ import shutil
 import subprocess
 from enum import Enum
 from pathlib import Path
+from typing import Literal
 
 import rich
 from pydantic import BaseModel, DirectoryPath, FilePath, ValidationInfo, field_validator, model_validator
@@ -100,6 +101,7 @@ class Config(BaseModel):
     ref_model_type: RefModelType  # Inferred from ref_model_exe by model validator
     include_priv_tests: bool = True
     compile_only: bool = False
+    xlen: Literal[32, 64] | None = None
 
     model_config = {"frozen": True}
 
