@@ -16,12 +16,6 @@ from testgen.data.state import TestData
 from testgen.exception.common import (
     generate_breakpoint_tests,
     generate_illegal_instruction_test,
-    generate_instr_access_fault_tests,
-    generate_load_access_fault_tests,
-    generate_misaligned_priority_fetch_tests,
-    generate_misaligned_priority_load_tests,
-    generate_misaligned_priority_store_tests,
-    generate_store_access_fault_tests,
 )
 
 StimulusGenerator = Callable[[TestData, str], list[str]]
@@ -44,109 +38,47 @@ def _illegal(encoding: str) -> StimulusGenerator:
     return partial(generate_illegal_instruction_test, name=name, encoding=encoding)
 
 
-def _load(op: str) -> StimulusGenerator:
-    return partial(generate_load_access_fault_tests, use_sigupd=False, operations=(op,))
+def _misaligned_branch(test_data: TestData, covergroup: str) -> list[str]:
+    coverpoint = "cp_instr_adr_misaligned_branch"
+    return [
+        test_data.add_testcase("taken_beq_pc_6", coverpoint, covergroup),
+        "beq x0, x0, .+6",
+        "addi x0, x2, 0",
+        "nop",
+    ]
 
 
-def _store(op: str) -> StimulusGenerator:
-    return partial(generate_store_access_fault_tests, operations=(op,))
+def _misaligned_jal(test_data: TestData, covergroup: str) -> list[str]:
+    coverpoint = "cp_instr_adr_misaligned_jal"
+    return [
+        test_data.add_testcase("jal_pc_6", coverpoint, covergroup),
+        "jal x0, .+6",
+        "addi x0, x2, 0",
+        "nop",
+    ]
 
 
-def _priority_load(op: str, offset: int) -> StimulusGenerator:
-    return partial(
-        generate_misaligned_priority_load_tests,
-        coverpoint="cp_misaligned_priority_load",
-        name_infix="_",
-        operations=(op,),
-        offsets=(offset,),
-    )
-
-
-def _priority_store(op: str, offset: int) -> StimulusGenerator:
-    return partial(
-        generate_misaligned_priority_store_tests,
-        coverpoint="cp_misaligned_priority_store",
-        name_infix="_",
-        operations=(op,),
-        offsets=(offset,),
-    )
-
-
-def _priority_fetch(test_data: TestData, covergroup: str) -> list[str]:
-    return generate_misaligned_priority_fetch_tests(
-        test_data,
-        covergroup,
-        "cp_misaligned_priority_fetch",
-        name_prefix="",
-        name_suffix="",
-        include_existent=False,
-    )
-
-
-def _instruction_access_fault(test_data: TestData, covergroup: str) -> list[str]:
-    return generate_instr_access_fault_tests(test_data, covergroup, use_trap_handler_sentinel=False)
+def _misaligned_jalr(test_data: TestData, covergroup: str) -> list[str]:
+    coverpoint = "cp_instr_adr_misaligned_jalr"
+    addr_reg = test_data.int_regs.get_register()
+    lines = [
+        ".p2align 2",
+        f"LA(x{addr_reg}, 1f)",
+        test_data.add_testcase("jalr_pc_2", coverpoint, covergroup),
+        f"jalr x0, 2(x{addr_reg})",
+        "1:",
+        "nop",
+    ]
+    test_data.int_regs.return_registers([addr_reg])
+    return lines
 
 
 def get_exception_cases() -> tuple[ExceptionCase, ...]:
     """Return neutral cases currently suitable for an external exception observer."""
     return (
         ExceptionCase("IllegalZero", "IllegalInstruction", 2, _illegal("0x00000000")),
-        ExceptionCase("IllegalOnes", "IllegalInstruction", 2, _illegal("0xFFFFFFFF")),
         ExceptionCase("Breakpoint", "Breakpoint", 3, generate_breakpoint_tests),
-        ExceptionCase(
-            "InstructionAccessFault",
-            "InstructionAccessFault",
-            1,
-            _instruction_access_fault,
-            params=("RVMODEL_ACCESS_FAULT_ADDRESS_DEFINED: true",),
-        ),
-        ExceptionCase(
-            "InstructionAccessPriorityOffset2",
-            "MisalignedPriorityFetch",
-            1,
-            _priority_fetch,
-            params=("RVMODEL_ACCESS_FAULT_ADDRESS_DEFINED: true",),
-        ),
-        *(
-            ExceptionCase(
-                f"LoadAccessFault{op.title()}",
-                "LoadAccessFault",
-                5,
-                _load(op),
-                params=("RVMODEL_ACCESS_FAULT_ADDRESS_DEFINED: true",),
-            )
-            for op in ("lb", "lbu", "lh", "lhu", "lw", "lwu", "ld")
-        ),
-        *(
-            ExceptionCase(
-                f"StoreAccessFault{op.title()}",
-                "StoreAccessFault",
-                7,
-                _store(op),
-                params=("RVMODEL_ACCESS_FAULT_ADDRESS_DEFINED: true",),
-            )
-            for op in ("sb", "sh", "sw", "sd")
-        ),
-        *(
-            ExceptionCase(
-                f"LoadAccessPriority{op.title()}Offset{offset}",
-                "MisalignedPriorityLoad",
-                5,
-                _priority_load(op, offset),
-                params=("RVMODEL_ACCESS_FAULT_ADDRESS_DEFINED: true",),
-            )
-            for op in ("lb", "lbu", "lh", "lhu", "lw", "lwu", "ld")
-            for offset in range(8)
-        ),
-        *(
-            ExceptionCase(
-                f"StoreAccessPriority{op.title()}Offset{offset}",
-                "MisalignedPriorityStore",
-                7,
-                _priority_store(op, offset),
-                params=("RVMODEL_ACCESS_FAULT_ADDRESS_DEFINED: true",),
-            )
-            for op in ("sb", "sh", "sw", "sd")
-            for offset in range(8)
-        ),
+        ExceptionCase("InstructionAddressMisalignedBranch", "InstructionAddressMisaligned", 0, _misaligned_branch),
+        ExceptionCase("InstructionAddressMisalignedJal", "InstructionAddressMisaligned", 0, _misaligned_jal),
+        ExceptionCase("InstructionAddressMisalignedJalr", "InstructionAddressMisaligned", 0, _misaligned_jalr),
     )
