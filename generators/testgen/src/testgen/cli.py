@@ -31,7 +31,7 @@ from rich.progress import (
 )
 
 from testgen.constants import E_EXTENSION_TESTS
-from testgen.generate import generate_priv_test, generate_unpriv_extension_tests
+from testgen.generate import generate_exception_tests, generate_priv_test, generate_unpriv_extension_tests
 from testgen.io.testplans import get_extensions
 from testgen.priv import get_priv_test_extensions
 
@@ -56,6 +56,13 @@ class PrivTask:
     """Task for generating privileged tests."""
 
     testsuite: str
+    output_test_dir: Path
+
+
+@dataclass
+class ExceptionTask:
+    """Task for generating neutral exception tests."""
+
     output_test_dir: Path
 
 
@@ -103,6 +110,8 @@ def generate_all_tests(
                 unpriv_ext_list.append(ext)
             elif ext in available_priv_extensions:
                 priv_ext_list.append(ext)
+            elif ext == "ExceptionsI":
+                pass
             else:
                 print(
                     f"Extension {ext} not found in unpriv testplans at {testplan_dir} or priv test generators. This is normal for handwritten tests."
@@ -118,7 +127,7 @@ def generate_all_tests(
                 priv_ext_list.remove(ext)
 
     # Build list of test generation tasks
-    tasks: list[UnprivTask | PrivTask] = []
+    tasks: list[UnprivTask | PrivTask | ExceptionTask] = []
 
     for xlen in [32, 64]:
         for E_ext in [False, True]:
@@ -129,6 +138,8 @@ def generate_all_tests(
                 tasks.append(UnprivTask(xlen, E_ext, testsuite, testplan_dir, output_test_dir, is_vector))
 
     tasks.extend(PrivTask(testsuite, output_test_dir) for testsuite in sorted(priv_ext_list))
+    if extensions == "all" or "ExceptionsI" in {ext.strip() for ext in extensions.split(",")}:
+        tasks.append(ExceptionTask(output_test_dir))
 
     # Generate all tests in parallel
     with ProcessPoolExecutor(max_workers=jobs) as executor:
@@ -157,7 +168,7 @@ def _progress(description: str) -> Progress:
     )
 
 
-def _dispatch_test_gen(task: UnprivTask | PrivTask) -> None:
+def _dispatch_test_gen(task: UnprivTask | PrivTask | ExceptionTask) -> None:
     """Dispatch test generation based on task type."""
     if isinstance(task, UnprivTask):
         generate_unpriv_extension_tests(
@@ -173,6 +184,8 @@ def _dispatch_test_gen(task: UnprivTask | PrivTask) -> None:
             testsuite=task.testsuite,
             output_test_dir=task.output_test_dir,
         )
+    elif isinstance(task, ExceptionTask):
+        generate_exception_tests(task.output_test_dir)
     else:
         raise TypeError("Invalid task type.")
 

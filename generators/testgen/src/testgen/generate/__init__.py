@@ -7,10 +7,12 @@ This module provides the main entry points for generating tests:
 - generate_all_priv_tests: Generate tests for all registered privileged extensions
 """
 
+from testgen.generate.exception import generate_exception_tests
 from testgen.generate.priv import generate_priv_test
 from testgen.generate.unpriv import generate_unpriv_extension_tests
 
 __all__ = [
+    "generate_exception_tests",
     "generate_priv_test",
     "generate_unpriv_extension_tests",
 ]

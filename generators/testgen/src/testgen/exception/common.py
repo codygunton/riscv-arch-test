@@ -1,12 +1,12 @@
 ##################################
-# priv/extensions/ExceptionsCommon.py
+# exception/common.py
 #
 # Shared exception tests generation
 # jgong@hmc.edu Apr 2026
 # SPDX-License-Identifier: Apache-2.0
 ##################################
 
-"""Common exception test generation"""
+"""Architecturally neutral exception stimuli shared by all observers."""
 
 from testgen.asm.helpers import comment_banner, write_sigupd
 from testgen.data.state import TestData
@@ -131,7 +131,9 @@ def generate_instr_adr_misaligned_jalr_tests(test_data: TestData, covergroup: st
     return lines
 
 
-def generate_instr_access_fault_tests(test_data: TestData, covergroup: str) -> list[str]:
+def generate_instr_access_fault_tests(
+    test_data: TestData, covergroup: str, *, use_trap_handler_sentinel: bool = True
+) -> list[str]:
     coverpoint = "cp_instr_access_fault"
     addr_reg = test_data.int_regs.get_register()
 
@@ -141,9 +143,10 @@ def generate_instr_access_fault_tests(test_data: TestData, covergroup: str) -> l
         f"LA(x{addr_reg}, RVMODEL_ACCESS_FAULT_ADDRESS)",
         test_data.add_testcase("instr_access_fault", coverpoint, covergroup),
         f"jalr x1, 0(x{addr_reg})",
-        "nop",
-        "#endif",
     ]
+    if use_trap_handler_sentinel:
+        lines.append("nop")
+    lines.append("#endif")
 
     test_data.int_regs.return_registers([addr_reg])
     return lines
@@ -167,20 +170,30 @@ def generate_ecall_tests(
     return lines
 
 
-def generate_illegal_instruction_tests(test_data: TestData, covergroup: str) -> list[str]:
+def generate_illegal_instruction_test(
+    test_data: TestData, covergroup: str, name: str, encoding: str
+) -> list[str]:
     coverpoint = "cp_illegal_instruction"
-
-    lines = [
+    return [
         comment_banner(coverpoint, "Illegal Instruction"),
         ".p2align 2",
-        test_data.add_testcase("illegal_0x00000000", coverpoint, covergroup),
-        ".word 0x00000000",
-        "nop",
-        ".p2align 2",
-        test_data.add_testcase("illegal_0xFFFFFFFF", coverpoint, covergroup),
-        ".word 0xFFFFFFFF",
+        test_data.add_testcase(name, coverpoint, covergroup),
+        f".word {encoding}",
         "nop",
     ]
+
+
+def generate_illegal_instruction_tests(test_data: TestData, covergroup: str) -> list[str]:
+    """Generate the standard pair of illegal-instruction cases."""
+    coverpoint = "cp_illegal_instruction"
+    encodings = (
+        ("illegal_0x00000000", "0x00000000"),
+        ("illegal_0xFFFFFFFF", "0xFFFFFFFF"),
+    )
+
+    lines = [comment_banner(coverpoint, "Illegal Instruction")]
+    for name, encoding in encodings:
+        lines.extend(generate_illegal_instruction_test(test_data, covergroup, name, encoding)[1:])
     return lines
 
 
@@ -337,6 +350,7 @@ def generate_load_access_fault_tests(
     covergroup: str,
     *,
     use_sigupd: bool = True,
+    operations: tuple[str, ...] = ("lb", "lbu", "lh", "lhu", "lw", "lwu", "ld"),
 ) -> list[str]:
     """Generate load-access-fault testcases."""
     coverpoint = "cp_load_access_fault"
@@ -344,7 +358,7 @@ def generate_load_access_fault_tests(
 
     lines = ["#ifdef RVMODEL_ACCESS_FAULT_ADDRESS", comment_banner(coverpoint, "Load Access Fault")]
 
-    load_ops = ["lb", "lbu", "lh", "lhu", "lw"]
+    load_ops = [op for op in operations if op not in ("lwu", "ld")]
 
     for op in load_ops:
         lines.append(f"\n# Testcase: {op} access fault")
@@ -362,7 +376,7 @@ def generate_load_access_fault_tests(
             lines.append(write_sigupd(check_reg, test_data))
 
     lines.extend(["", "#if __riscv_xlen == 64"])
-    for op in ["lwu", "ld"]:
+    for op in (op for op in operations if op in ("lwu", "ld")):
         lines.append(f"\n# Testcase: {op} access fault")
         lines.append(f"LA(x{addr_reg}, RVMODEL_ACCESS_FAULT_ADDRESS)")
         if use_sigupd:
@@ -382,13 +396,18 @@ def generate_load_access_fault_tests(
     return lines
 
 
-def generate_store_access_fault_tests(test_data: TestData, covergroup: str) -> list[str]:
+def generate_store_access_fault_tests(
+    test_data: TestData,
+    covergroup: str,
+    *,
+    operations: tuple[str, ...] = ("sb", "sh", "sw", "sd"),
+) -> list[str]:
     coverpoint = "cp_store_access_fault"
     addr_reg, data_reg = test_data.int_regs.get_registers(2)
 
     lines = ["#ifdef RVMODEL_ACCESS_FAULT_ADDRESS", comment_banner(coverpoint, "Store Access Fault")]
 
-    store_ops = ["sb", "sh", "sw"]
+    store_ops = [op for op in operations if op != "sd"]
     test_values = {"sb": "0xAB", "sh": "0xBEAD", "sw": "0xADDEDCAB", "sd": "0xADDEDCABADDEDCAB"}
 
     for op in store_ops:
@@ -403,8 +422,9 @@ def generate_store_access_fault_tests(test_data: TestData, covergroup: str) -> l
             ]
         )
 
-    lines.extend(
-        [
+    if "sd" in operations:
+        lines.extend(
+            [
             "",
             "#if __riscv_xlen == 64",
             "\n# Testcase: sd access fault",
@@ -416,8 +436,10 @@ def generate_store_access_fault_tests(test_data: TestData, covergroup: str) -> l
             "",
             "#endif",
             "#endif",
-        ]
-    )
+            ]
+        )
+    else:
+        lines.append("#endif")
 
     test_data.int_regs.return_registers([addr_reg, data_reg])
     return lines
@@ -428,17 +450,20 @@ def generate_misaligned_priority_load_tests(
     covergroup: str,
     coverpoint: str,
     name_infix: str = "_load_",
+    *,
+    operations: tuple[str, ...] = ("lh", "lhu", "lw", "lb", "lbu", "lwu", "ld"),
+    offsets: tuple[int, ...] = tuple(range(8)),
 ) -> list[str]:
     """Generate misaligned-priority load testcases."""
     addr_reg, temp_reg, check_reg = test_data.int_regs.get_registers(3)
 
     lines = ["#ifdef RVMODEL_ACCESS_FAULT_ADDRESS", comment_banner(coverpoint, "Misaligned Priority Load")]
-    load_ops_base = ["lh", "lhu", "lw", "lb", "lbu"]
-    load_ops_64 = ["lwu", "ld"]
+    load_ops_base = [op for op in operations if op not in ("lwu", "ld")]
+    load_ops_64 = [op for op in operations if op in ("lwu", "ld")]
 
     lines.append(f"LA(x{addr_reg}, RVMODEL_ACCESS_FAULT_ADDRESS)")
 
-    for offset in range(8):
+    for offset in offsets:
         lines.append(f"addi x{temp_reg}, x{addr_reg}, {offset}")
 
         for op in load_ops_base:
@@ -473,14 +498,17 @@ def generate_misaligned_priority_store_tests(
     covergroup: str,
     coverpoint: str,
     name_infix: str = "_store_",
+    *,
+    operations: tuple[str, ...] = ("sb", "sh", "sw", "sd"),
+    offsets: tuple[int, ...] = tuple(range(8)),
 ) -> list[str]:
     """Generate misaligned-priority store testcases."""
     addr_reg, data_reg = test_data.int_regs.get_registers(2)
 
     lines = ["#ifdef RVMODEL_ACCESS_FAULT_ADDRESS", comment_banner(coverpoint, "Misaligned Priority Store")]
-    store_ops_base = ["sb", "sh", "sw"]
+    store_ops_base = [op for op in operations if op != "sd"]
 
-    for offset in range(8):
+    for offset in offsets:
         lines.extend(
             [
                 f"LA(x{addr_reg}, RVMODEL_ACCESS_FAULT_ADDRESS)",
@@ -499,8 +527,9 @@ def generate_misaligned_priority_store_tests(
                 ]
             )
 
-        lines.extend(
-            [
+        if "sd" in operations:
+            lines.extend(
+                [
                 "",
                 "#if __riscv_xlen == 64",
                 f"\n# Testcase: sd with offset {offset} (LSBs: {offset:03b}) - Access fault Misaligned",
@@ -510,8 +539,8 @@ def generate_misaligned_priority_store_tests(
                 "",
                 "#endif",
                 "",
-            ]
-        )
+                ]
+            )
 
     lines.append("#endif")
     test_data.int_regs.return_registers([addr_reg, data_reg])
@@ -524,6 +553,9 @@ def generate_misaligned_priority_fetch_tests(
     coverpoint: str,
     name_prefix: str = "fetch_",
     name_suffix: str = "_priority",
+    *,
+    include_existent: bool = True,
+    include_nonexistent: bool = True,
 ) -> list[str]:
     """Generate misaligned-priority fetch testcases."""
     addr_reg = test_data.int_regs.get_register()
@@ -531,8 +563,9 @@ def generate_misaligned_priority_fetch_tests(
     lines = [comment_banner(coverpoint, "Misaligned Priority Fetch")]
 
     target_label = f"misaligned_fetch_target_{test_data.test_count + 1}"
-    lines.extend(
-        [
+    if include_existent:
+        lines.extend(
+            [
             "\n# misaligned fetch - existent address",
             f"LA(x{addr_reg}, {target_label})",
             f"addi x{addr_reg}, x{addr_reg}, 2",
@@ -542,6 +575,11 @@ def generate_misaligned_priority_fetch_tests(
             ".p2align 4",
             f"{target_label}:",
             "nop",
+            ]
+        )
+    if include_nonexistent:
+        lines.extend(
+            [
             "#ifdef RVMODEL_ACCESS_FAULT_ADDRESS",
             "\n# misaligned fetch - non-existent (fault) address",
             f"LA(x{addr_reg}, RVMODEL_ACCESS_FAULT_ADDRESS)",
@@ -550,8 +588,8 @@ def generate_misaligned_priority_fetch_tests(
             f"jalr x1, 0(x{addr_reg})",
             "nop",
             "#endif",
-        ]
-    )
+            ]
+        )
 
     test_data.int_regs.return_registers([addr_reg])
     return lines

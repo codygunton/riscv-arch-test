@@ -65,6 +65,22 @@
 /**** - Include headers that contain code (not macros) that would throw off the address ****/
 /**** - Terminate test with call to RVMODEL_HALT                                        ****/
 /*******************************************************************************************/
+#ifdef RVMODEL_COMPILE_ONLY
+.macro RVTEST_CODE_END
+  .global rvtest_code_end
+  rvtest_code_end:
+
+  .pushsection .text.rvmodel,"ax",@progbits
+  rvmodel_boot:
+    #ifdef RVMODEL_BOOT
+      RVMODEL_BOOT
+    #endif
+    ret
+  .popsection
+
+  .option pop
+.endm
+#else
 .macro RVTEST_CODE_END
   // Disable assembler/linker optimizations for RVTEST_CODE_END
   .option push
@@ -283,6 +299,7 @@
   // Pop the .option norelax from RVTEST_BEGIN
   .option pop
 .endm
+#endif
 /******************************** end of RVTEST_CODE_END ***********************************/
 
 

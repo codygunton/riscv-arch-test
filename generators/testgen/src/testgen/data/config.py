@@ -43,6 +43,7 @@ class TestConfig:
     required_extensions: list[str] | None = None
     march_extensions: list[str] | None = None
     extra_params: list[str] | None = None
+    include_environment_extensions: bool = True
 
     @property
     def xlen_format_str(self) -> str:
