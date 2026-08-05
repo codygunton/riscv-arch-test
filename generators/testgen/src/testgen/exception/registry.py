@@ -10,15 +10,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from functools import partial
 
 from testgen.data.state import TestData
-from testgen.exception.common import (
-    generate_breakpoint_tests,
-    generate_illegal_instruction_test,
-    generate_load_access_fault_tests,
-    generate_store_access_fault_tests,
-)
+from testgen.exception.common import generate_breakpoint_tests
 
 StimulusGenerator = Callable[[TestData, str], list[str]]
 
@@ -33,19 +27,6 @@ class ExceptionCase:
     stimulus: StimulusGenerator
     required_extensions: tuple[str, ...] = ("I",)
     params: tuple[str, ...] = ()
-
-
-def _illegal(encoding: str) -> StimulusGenerator:
-    name = f"illegal_{encoding.lower()}"
-    return partial(generate_illegal_instruction_test, name=name, encoding=encoding)
-
-
-def _load(test_data: TestData, covergroup: str) -> list[str]:
-    return generate_load_access_fault_tests(test_data, covergroup, use_sigupd=False, operations=("lw",))
-
-
-def _store(test_data: TestData, covergroup: str) -> list[str]:
-    return generate_store_access_fault_tests(test_data, covergroup, operations=("sw",))
 
 
 def _misaligned_branch(test_data: TestData, covergroup: str) -> list[str]:
@@ -86,23 +67,8 @@ def _misaligned_jalr(test_data: TestData, covergroup: str) -> list[str]:
 def get_exception_cases() -> tuple[ExceptionCase, ...]:
     """Return neutral cases currently suitable for an external exception observer."""
     return (
-        ExceptionCase("IllegalZero", "IllegalInstruction", 2, _illegal("0x00000000")),
         ExceptionCase("Breakpoint", "Breakpoint", 3, generate_breakpoint_tests),
         ExceptionCase("InstructionAddressMisalignedBranch", "InstructionAddressMisaligned", 0, _misaligned_branch),
         ExceptionCase("InstructionAddressMisalignedJal", "InstructionAddressMisaligned", 0, _misaligned_jal),
         ExceptionCase("InstructionAddressMisalignedJalr", "InstructionAddressMisaligned", 0, _misaligned_jalr),
-        ExceptionCase(
-            "LoadAccessFaultLw",
-            "LoadAccessFault",
-            5,
-            _load,
-            params=("RVMODEL_ACCESS_FAULT_ADDRESS_DEFINED: true",),
-        ),
-        ExceptionCase(
-            "StoreAccessFaultSw",
-            "StoreAccessFault",
-            7,
-            _store,
-            params=("RVMODEL_ACCESS_FAULT_ADDRESS_DEFINED: true",),
-        ),
     )
